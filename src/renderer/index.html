@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <title>Aeri</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div
+      class="stage"
+      id="stage"
+      data-side="right"
+      data-vertical="bottom"
+      data-glass="on"
+    >
+      <main class="widget" id="widget" aria-live="polite">
+        <div class="content">
+          <div class="cover-shell" id="coverShell">
+            <div class="cover-wrap" id="coverWrap">
+              <div class="cover-fallback" id="coverFallback" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M9.5 18.2V6.4l8.2-1.7v9.6"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <ellipse cx="7.2" cy="18.4" rx="2.3" ry="1.9" fill="currentColor" />
+                  <ellipse cx="15.4" cy="14.5" rx="2.3" ry="1.9" fill="currentColor" />
+                </svg>
+              </div>
+              <img id="cover" alt="" draggable="false" />
+            </div>
+          </div>
+
+          <div class="details">
+            <div class="meta" id="meta">
+              <div class="title" id="title">Ничего не играет</div>
+              <div class="artist" id="artist">Включите трек в любом плеере</div>
+            </div>
+
+            <div class="controls" id="controls">
+              <button
+                class="ctrl skip"
+                id="previousButton"
+                type="button"
+                aria-label="Предыдущий трек"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M18.7 5.6 9.8 12l8.9 6.4V5.6Z" fill="currentColor" />
+                  <rect x="5.7" y="5.6" width="2.3" height="12.8" rx="1.15" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                class="ctrl play"
+                id="playButton"
+                type="button"
+                aria-label="Пауза"
+              >
+                <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8.4 5.4 19.2 12 8.4 18.6V5.4Z" fill="currentColor" />
+                </svg>
+                <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="7.2" y="5.4" width="3.4" height="13.2" rx="1.4" fill="currentColor" />
+                  <rect x="13.4" y="5.4" width="3.4" height="13.2" rx="1.4" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                class="ctrl skip"
+                id="nextButton"
+                type="button"
+                aria-label="Следующий трек"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5.3 5.6 14.2 12l-8.9 6.4V5.6Z" fill="currentColor" />
+                  <rect x="16" y="5.6" width="2.3" height="12.8" rx="1.15" fill="currentColor" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="seek-area">
+              <div class="seek-row">
+                <div
+                  class="seek"
+                  id="seek"
+                  role="slider"
+                  aria-label="Позиция трека"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="0"
+                  aria-valuetext="0:00"
+                >
+                  <div class="seek-rail"><div class="seek-fill" id="seekFill"></div></div>
+                  <div class="seek-knob" id="seekKnob"></div>
+                </div>
+              </div>
+              <div class="time-row">
+                <span class="time-elapsed" id="elapsed">0:00</span>
+                <span class="time-total" id="total">--:--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <aside class="volume-panel" id="volumePanel" aria-label="Громкость">
+        <div class="volume-row" id="volumeRow">
+          <span class="volume-value" id="volumeValue">50%</span>
+          <div
+            class="volume"
+            id="volume"
+            role="slider"
+            aria-label="Громкость"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="50"
+          >
+            <div class="volume-rail"><div class="volume-fill" id="volumeFill"></div></div>
+            <div class="volume-knob" id="volumeKnob"></div>
+          </div>
+          <button class="volume-button" id="volumeButton" type="button" aria-label="Громкость">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 9.4h3.2L12 5.4v13.2L7.2 14.6H4z" fill="currentColor" />
+              <path
+                class="vol-wave vol-wave-1"
+                d="M14.8 8.5a4.6 4.6 0 0 1 0 7"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+              <path
+                class="vol-wave vol-wave-2"
+                d="M17.5 6.2a8.1 8.1 0 0 1 0 11.6"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+              <path
+                class="vol-mute"
+                d="m15.4 9.7 5 4.6m0-4.6-5 4.6"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </aside>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

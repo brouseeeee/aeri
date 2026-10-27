@@ -1,0 +1,20 @@
+{
+  "name": "aeri",
+  "productName": "Aeri",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aeri - liquid glass now-playing overlay for Windows",
+  "author": "brouseee",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "mock": "electron . --mock",
+    "build:bridge": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-bridge.ps1",
+    "build:app": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-app.ps1",
+    "build": "npm run build:bridge && npm run build:app"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.0.0"
+  }
+}
