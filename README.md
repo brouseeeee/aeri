@@ -68,13 +68,19 @@ release\Aeri-win32-x64\Aeri.exe
 
 ## Запуск из исходников
 
-Нужны Node.js 22+ и Python 3.11 (для моста, который читает медиа-сессию и громкость Windows).
+Нужен Node.js 22+.
 
 ```powershell
 npm install
+npm start
+```
+
+Мост `native\media-bridge.exe` уже лежит в репозитории. Python 3.11 нужен только для его пересборки:
+
+```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r tools\requirements-bridge.txt
-npm start
+npm run build:bridge
 ```
 
 Демо-режим без реального плеера:
@@ -91,11 +97,11 @@ npm run build:app       # пакует Electron-приложение в release\
 npm run build:installer # собирает release\Aeri-1.0.0-Setup.exe
 ```
 
-`build:bridge` требует Python 3.11 и зависимости из `tools\requirements-bridge.txt`. `build:app` требует `@electron/packager` (устанавливается через `npm install`) и собранный `native\media-bridge.exe`.
+`build:bridge` требует Python 3.11 и зависимости из `tools\requirements-bridge.txt`. `build:app` требует `@electron/packager` (устанавливается через `npm install`) и `native\media-bridge.exe` (уже лежит в репозитории).
 
 `build:installer` требует [Inno Setup 6](https://jrsoftware.org/isinfo.php) (проверено на 6.7.3) и готовую папку `release\Aeri-win32-x64\`. Установщик собирается по скрипту `tools\installer.iss`, ставится для текущего пользователя в `%LOCALAPPDATA%\Programs\Aeri` и не трогает `%APPDATA%\Aeri`. Если Inno Setup не установлен: `winget install --id JRSoftware.InnoSetup -e`.
 
-В git попадают только исходники: папки `release\`, `build\`, `node_modules\`, `.venv\`, а также `native\media-bridge.exe` и локальные ярлыки исключены через `.gitignore`.
+В git не попадают `release\`, `build\`, `node_modules\`, `.venv\` и локальные ярлыки — они исключены через `.gitignore`. Собранный `native\media-bridge.exe` хранится в репозитории.
 
 ## Как это устроено
 

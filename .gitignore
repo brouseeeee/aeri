@@ -5,7 +5,6 @@ release/
 *.log
 __pycache__/
 *.pyc
-native/media-bridge.exe
 *.lnk
 Thumbs.db
 desktop.ini
