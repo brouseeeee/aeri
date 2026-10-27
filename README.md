@@ -4,6 +4,17 @@
 
 ![Aeri](docs/preview.png)
 
+## Скачать
+
+Готовые сборки — в [Releases](https://github.com/brouseeeee/aeri/releases/latest). В релизе два файла:
+
+| Файл | Что это |
+|---|---|
+| **`Aeri-1.0.0-Setup.exe`** | **Установщик** для Windows x64. Ставит приложение в `%LOCALAPPDATA%\Programs\Aeri`, добавляет ярлык в меню «Пуск» и (по желанию) на рабочий стол, создаёт деинсталлятор. Права администратора не нужны. |
+| **`Aeri-1.0.0-portable-win32-x64.zip`** | **Portable-сборка**. Полностью распакуйте архив в любую папку и запустите `Aeri.exe`. Установка не требуется. |
+
+Обе версии используют одни и те же настройки в `%APPDATA%\Aeri`. Установщик и деинсталлятор не удаляют эту папку, поэтому положение виджета и режим Liquid glass сохраняются при переустановке и удалении. Сборки не подписаны, поэтому SmartScreen может показать предупреждение — это ожидаемо.
+
 ## Что умеет
 
 - Всплывает при **смене трека** и при **паузе**.
@@ -27,6 +38,8 @@ release\Aeri-win32-x64\Aeri.exe
 ```
 
 Для удобства создайте ярлык на `Aeri.exe` (в локальной сборке уже есть `Aeri.lnk`). Приложение живёт в трее и не занимает панель задач. Чтобы открыть виджет вручную, кликните по иконке в трее или запустите exe ещё раз.
+
+Если приложение установлено через установщик, запускайте Aeri из меню «Пуск». Portable-сборку запускайте из распакованной папки.
 
 Чтобы приложение запускалось вместе с Windows, положите ярлык на `Aeri.exe` в папку автозагрузки (`Win+R` → `shell:startup`).
 
@@ -70,14 +83,17 @@ npm start
 npm run mock
 ```
 
-## Сборка exe
+## Сборка exe и установщика
 
 ```powershell
-npm run build:bridge   # собирает native\media-bridge.exe через PyInstaller
-npm run build:app      # пакует Electron-приложение в release\
+npm run build:bridge    # собирает native\media-bridge.exe через PyInstaller
+npm run build:app       # пакует Electron-приложение в release\
+npm run build:installer # собирает release\Aeri-1.0.0-Setup.exe
 ```
 
 `build:bridge` требует Python 3.11 и зависимости из `tools\requirements-bridge.txt`. `build:app` требует `@electron/packager` (устанавливается через `npm install`) и собранный `native\media-bridge.exe`.
+
+`build:installer` требует [Inno Setup 6](https://jrsoftware.org/isinfo.php) (проверено на 6.7.3) и готовую папку `release\Aeri-win32-x64\`. Установщик собирается по скрипту `tools\installer.iss`, ставится для текущего пользователя в `%LOCALAPPDATA%\Programs\Aeri` и не трогает `%APPDATA%\Aeri`. Если Inno Setup не установлен: `winget install --id JRSoftware.InnoSetup -e`.
 
 В git попадают только исходники: папки `release\`, `build\`, `node_modules\`, `.venv\`, а также `native\media-bridge.exe` и локальные ярлыки исключены через `.gitignore`.
 

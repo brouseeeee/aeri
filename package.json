@@ -11,6 +11,7 @@
     "mock": "electron . --mock",
     "build:bridge": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-bridge.ps1",
     "build:app": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-app.ps1",
+    "build:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-installer.ps1",
     "build": "npm run build:bridge && npm run build:app"
   },
   "devDependencies": {
