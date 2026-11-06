@@ -214,6 +214,7 @@ let progress = null;
 let volume = null;
 let progressTimer = null;
 let volumeInputTimer = null;
+let volumeChangeTimer = null;
 let lastVolumeInputAt = 0;
 let pendingVolumeInput = null;
 
@@ -274,8 +275,17 @@ function setVolume(value, animate = false) {
   if (volume && volume.isDragging()) return;
   const level = clamp(Number(value) || 0);
   if (volume) {
+    const changed = Math.abs(volume.getValue() - level) > 0.005;
     if (animate && Math.abs(volume.getValue() - level) > 0.005) volume.animateTo(level, 180);
     else volume.setValue(level);
+    if (changed) {
+      mixerRoot.classList.add("volume-changed");
+      window.clearTimeout(volumeChangeTimer);
+      volumeChangeTimer = window.setTimeout(() => {
+        mixerRoot.classList.remove("volume-changed");
+        volumeChangeTimer = null;
+      }, 900);
+    }
   }
 }
 

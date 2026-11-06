@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import concurrent.futures
+import hashlib
 import json
 import math
 import os
@@ -52,7 +53,11 @@ if hasattr(sys.stdin, "reconfigure"):
 POLL_SECONDS = 0.5
 VOLUME_POLL_SECONDS = 0.1
 COMMAND_TICK = 0.025
+ARTWORK_RETRY_SECONDS = 0.5
 YANDEX_MUSIC_AUMID_PREFIX = "a025c540.yandex.music_"
+VK_VOLUME_MUTE = 0xAD
+VK_VOLUME_DOWN = 0xAE
+VK_VOLUME_UP = 0xAF
 
 BROWSER_MARKERS = (
     "msedge",
@@ -345,6 +350,8 @@ class Bridge:
         self.refresh_requested = None
         self.art_key = ""
         self.art_uri = None
+        self.art_hash = None
+        self.art_track_key = ""
         self.art_fetched_at = 0.0
         self.art_failed_key = ""
         self.art_task = None
@@ -373,8 +380,9 @@ class Bridge:
         self.last_seen_status = None
         self.stop = threading.Event()
         self.commands: queue.Queue[str] = queue.Queue()
+        self.volume_key_events: queue.Queue[int] = queue.Queue()
         self.stdin_thread = threading.Thread(target=self._read_stdin, daemon=True)
-        self.volume_osd_hider = VolumeOsdHider()
+        self.volume_osd_hider = VolumeOsdHider(self.volume_key_events.put)
 
     def _read_stdin(self) -> None:
         try:
@@ -525,26 +533,42 @@ class Bridge:
         """Return (changed, data_uri) for the current track's artwork."""
         if key == self.art_key and self.art_uri:
             return False, self.art_uri
-        if key == self.art_failed_key and time.monotonic() - self.art_fetched_at < 3.0:
+        if (
+            key == self.art_failed_key
+            and time.monotonic() - self.art_fetched_at < ARTWORK_RETRY_SECONDS
+        ):
             return False, None
 
         uri = None
         try:
             thumb = getattr(props, "thumbnail", None)
             if thumb is not None:
-                stream = await asyncio.wait_for(thumb.open_read_async(), timeout=1.0)
+                stream = await asyncio.wait_for(thumb.open_read_async(), timeout=2.0)
                 size = int(stream.size)
                 if 0 < size <= 8 * 1024 * 1024:
                     reader = DataReader(stream.get_input_stream_at(0))
-                    await asyncio.wait_for(reader.load_async(size), timeout=1.0)
+                    await asyncio.wait_for(reader.load_async(size), timeout=2.0)
                     data = bytes(reader.read_buffer(size))
-                    content_type = image_content_type(
-                        data, getattr(stream, "content_type", "")
+                    image_hash = hashlib.sha256(data).digest()
+                    same_as_previous_yandex_art = (
+                        key.casefold().startswith(YANDEX_MUSIC_AUMID_PREFIX)
+                        and self.art_track_key
+                        and self.art_track_key.casefold().startswith(
+                            YANDEX_MUSIC_AUMID_PREFIX
+                        )
+                        and self.art_track_key != key
+                        and image_hash == self.art_hash
                     )
-                    uri = "data:%s;base64,%s" % (
-                        content_type,
-                        base64.b64encode(data).decode("ascii"),
-                    )
+                    if not same_as_previous_yandex_art:
+                        content_type = image_content_type(
+                            data, getattr(stream, "content_type", "")
+                        )
+                        uri = "data:%s;base64,%s" % (
+                            content_type,
+                            base64.b64encode(data).decode("ascii"),
+                        )
+                        self.art_hash = image_hash
+                        self.art_track_key = key
         except Exception as exc:
             log(f"artwork unavailable: {exc}")
 
@@ -580,7 +604,10 @@ class Bridge:
                 self.art_emitted_key = key
                 emit({"type": "art", "artId": key, "art": self.art_uri})
             return
-        if key == self.art_failed_key and time.monotonic() - self.art_fetched_at < 3.0:
+        if (
+            key == self.art_failed_key
+            and time.monotonic() - self.art_fetched_at < ARTWORK_RETRY_SECONDS
+        ):
             return
         if self.art_task is not None and not self.art_task.done():
             if self.art_task_key == key:
@@ -969,12 +996,37 @@ class Bridge:
         if kind == "shutdown":
             self.stop.set()
 
+    def _handle_volume_key(self, key: int) -> None:
+        try:
+            level, muted = self.volume.get()
+            if key == VK_VOLUME_MUTE:
+                level, muted = self.volume.set_muted(not muted)
+            elif key == VK_VOLUME_UP:
+                if muted:
+                    self.volume.set_muted(False)
+                level, muted = self.volume.set(min(1.0, level + 0.02))
+            elif key == VK_VOLUME_DOWN:
+                level, muted = self.volume.set(max(0.0, level - 0.02))
+            else:
+                return
+
+            self.last_volume_state = (round(level, 4), muted)
+            emit({"type": "volume", "volume": self.last_volume_state[0], "muted": muted})
+        except Exception as exc:
+            log(f"volume key handling failed: {type(exc).__name__}: {exc}")
+
     async def _run_commands(self) -> None:
         while not self.stop.is_set():
             try:
-                raw = self.commands.get_nowait()
+                key = self.volume_key_events.get_nowait()
             except queue.Empty:
-                await asyncio.sleep(COMMAND_TICK)
+                try:
+                    raw = self.commands.get_nowait()
+                except queue.Empty:
+                    await asyncio.sleep(COMMAND_TICK)
+                    continue
+            else:
+                self._handle_volume_key(key)
                 continue
 
             try:

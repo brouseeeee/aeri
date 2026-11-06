@@ -544,6 +544,7 @@ button::before {
 }
 
 .mixer.is-dragging .slider,
+.mixer.volume-changed .slider,
 .mixer:focus-visible .slider {
   box-shadow: 0 0 0 5px var(--white-color-22);
   transform: translate(-50%, 50%) scale(1.16);

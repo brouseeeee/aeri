@@ -13,7 +13,7 @@ const {
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const { execFileSync, spawn } = require('child_process');
+const { spawn } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 // Keep these values in sync with the layout custom properties in style.css.
@@ -31,7 +31,6 @@ const MOCK = process.argv.includes('--mock');
 const MOCK_STATIC = process.argv.includes('--mock-static');
 const WINDOWS_BUILD = Number(os.release().split('.')[2]) || 0;
 const IS_WINDOWS_10 = process.platform === 'win32' && WINDOWS_BUILD >= 10240 && WINDOWS_BUILD < 22000;
-const WINDOWS_10_MTCUVC_KEY = 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\MTCUVC';
 
 let win = null;
 let tray = null;
@@ -59,8 +58,6 @@ let liquidGlass = true;
 let windows10Style = false;
 let showOnTrackChange = true;
 let showOnVolumeChange = true;
-let windows10MediaFlyoutDisabled = false;
-let hideWindows10VolumeOsd = false;
 let trayMenu = null;
 let lastVolumeSnapshot = null;
 let dragging = false;
@@ -272,13 +269,9 @@ function loadSettings() {
     windows10Style = Boolean(data && data.windows10Style === true);
     showOnTrackChange = !data || data.showOnTrackChange !== false;
     showOnVolumeChange = !data || data.showOnVolumeChange !== false;
-    hideWindows10VolumeOsd = Boolean(data && data.hideWindows10VolumeOsd === true);
     liquidGlass = !windows10Style;
   } catch {
     /* first launch or unreadable settings */
-  }
-  if (IS_WINDOWS_10) {
-    windows10MediaFlyoutDisabled = readWindows10MediaFlyoutDisabled();
   }
 }
 
@@ -291,7 +284,6 @@ function saveSettings() {
         windows10Style,
         showOnTrackChange,
         showOnVolumeChange,
-        hideWindows10VolumeOsd,
       })
     );
     return true;
@@ -299,41 +291,6 @@ function saveSettings() {
     log('settings save failed:', error.message);
     return false;
   }
-}
-
-function readWindows10MediaFlyoutDisabled() {
-  try {
-    const output = execFileSync(
-      'reg.exe',
-      ['query', WINDOWS_10_MTCUVC_KEY, '/v', 'EnableMtcUvc'],
-      { encoding: 'utf8', windowsHide: true }
-    );
-    const match = output.match(/EnableMtcUvc\s+REG_DWORD\s+0x([0-9a-f]+)/i);
-    return match ? Number.parseInt(match[1], 16) === 0 : false;
-  } catch (error) {
-    if (error.status !== 1) {
-      log('Windows 10 media flyout setting read failed:', error.message);
-    }
-    return false;
-  }
-}
-
-function writeWindows10MediaFlyoutDisabled(disabled) {
-  const registryArguments = `add "${WINDOWS_10_MTCUVC_KEY}" /v EnableMtcUvc /t REG_DWORD /d ${disabled ? '0' : '1'} /f`;
-  const script = `$process = Start-Process -FilePath "$env:SystemRoot\\System32\\reg.exe" -ArgumentList '${registryArguments}' -Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $process.ExitCode`;
-  const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
-  return new Promise((resolve, reject) => {
-    const process = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encodedScript],
-      { windowsHide: true, stdio: 'ignore' }
-    );
-    process.once('error', reject);
-    process.once('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Windows registry command exited with code ${code}`));
-    });
-  });
 }
 
 function setBooleanSetting(name, value) {
@@ -347,40 +304,6 @@ function setBooleanSetting(name, value) {
     dialog.showErrorBox('Aeri', 'Не удалось сохранить настройку. Проверьте доступ к файлу настроек.');
   }
   refreshTrayMenu();
-}
-
-function setWindows10VolumeOsdHidden(hidden) {
-  const previous = hideWindows10VolumeOsd;
-  hideWindows10VolumeOsd = hidden;
-  if (!saveSettings()) {
-    hideWindows10VolumeOsd = previous;
-    dialog.showErrorBox('Aeri', 'Не удалось сохранить настройку. Проверьте доступ к файлу настроек.');
-    refreshTrayMenu();
-    return;
-  }
-  bridgeCommand({ cmd: 'setVolumeOsdHidden', value: hidden });
-  refreshTrayMenu();
-}
-
-async function setWindows10MediaFlyoutSetting(disabled) {
-  try {
-    await writeWindows10MediaFlyoutDisabled(disabled);
-    windows10MediaFlyoutDisabled = disabled;
-    refreshTrayMenu();
-    dialog.showMessageBox({
-      type: 'info',
-      title: 'Aeri',
-      message: 'Настройка Windows сохранена. Aeri не перезапускал Проводник.',
-      detail: 'Windows может применить изменение после выхода из учётной записи или перезапуска Проводника вручную.',
-    }).catch((error) => log('media flyout notice failed:', error.message));
-  } catch (error) {
-    log('Windows 10 media flyout setting update failed:', error.message);
-    refreshTrayMenu();
-    dialog.showErrorBox(
-      'Aeri',
-      `Не удалось изменить настройку медиаблока Windows 10. Подтвердите запрос UAC и повторите попытку.\n\n${error.message}`
-    );
-  }
 }
 
 function setWidgetStyle(style) {
@@ -935,9 +858,7 @@ function startBridge() {
       PYTHONIOENCODING: 'utf-8',
     },
   });
-  if (IS_WINDOWS_10) {
-    bridgeCommand({ cmd: 'setVolumeOsdHidden', value: hideWindows10VolumeOsd });
-  }
+  if (IS_WINDOWS_10) bridgeCommand({ cmd: 'setVolumeOsdHidden', value: true });
 
   bridge.stdout.setEncoding('utf8');
   bridge.stderr.setEncoding('utf8');
@@ -1187,26 +1108,6 @@ function refreshTrayMenu() {
       click: (item) => setBooleanSetting('volume', item.checked),
     },
   ];
-  if (IS_WINDOWS_10) {
-    settingsMenu.push(
-      { type: 'separator' },
-      {
-        label: 'Отключить штатный медиаблок Windows 10',
-        type: 'checkbox',
-        checked: windows10MediaFlyoutDisabled,
-        click: (item) => {
-          setWindows10MediaFlyoutSetting(item.checked);
-        },
-      },
-      {
-        label: 'Скрывать панель громкости Windows 10',
-        type: 'checkbox',
-        checked: hideWindows10VolumeOsd,
-        click: (item) => setWindows10VolumeOsdHidden(item.checked),
-      }
-    );
-  }
-
   trayMenu = Menu.buildFromTemplate([
     {
       label: 'Показать виджет',
