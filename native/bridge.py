@@ -163,21 +163,6 @@ class YandexMusicTimelineReader:
         self.position_text = None
         self.duration_text = None
         self.last_discovery_at = 0.0
-        self.last_restore_at = 0.0
-
-    def _ensure_visible(self, user32) -> bool:
-        if not self.hwnd or not user32.IsWindow(self.hwnd):
-            return False
-        if not user32.IsIconic(self.hwnd):
-            return True
-
-        now = time.monotonic()
-        if now - self.last_restore_at < 2.0:
-            return False
-        self.last_restore_at = now
-        user32.ShowWindow(self.hwnd, 4)
-        time.sleep(0.3)
-        return not user32.IsIconic(self.hwnd)
 
     def _find_controls(self, auto) -> bool:
         window = auto.WindowControl(
@@ -194,8 +179,6 @@ class YandexMusicTimelineReader:
             return False
         self.window = window
         self.hwnd = hwnd
-        if not self._ensure_visible(ctypes.windll.user32):
-            return False
 
         controls = [
             control
@@ -243,9 +226,6 @@ class YandexMusicTimelineReader:
                 self.slider = None
                 self.position_text = None
                 self.duration_text = None
-
-            if self.hwnd and not self._ensure_visible(ctypes.windll.user32):
-                return None
 
             if self.window is None or (
                 self.slider is None
@@ -719,8 +699,10 @@ class Bridge:
         future = self.yandex_timeline_future
         if future is not None and future.done():
             try:
-                self.yandex_timeline = future.result()
-                self.yandex_progress_failed_at = 0.0
+                timeline = future.result()
+                if timeline is not None:
+                    self.yandex_timeline = timeline
+                    self.yandex_progress_failed_at = 0.0
             except Exception as exc:
                 if now - self.yandex_progress_failed_at >= 10.0:
                     log(f"Yandex Music timeline unavailable: {type(exc).__name__}: {exc}")
