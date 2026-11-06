@@ -39,11 +39,17 @@ function applyLayout(layout) {
   }
   const glass = glassMode(layout.glass);
   if (glass) stage.dataset.glass = glass;
+  if (layout.windows10Style === true || layout.windows10Style === 'on') {
+    stage.dataset.windows10Style = 'on';
+  } else if (layout.windows10Style === false || layout.windows10Style === 'off') {
+    stage.dataset.windows10Style = 'off';
+  }
 }
 applyLayout({
   side: initialParams.get('side'),
   vertical: initialParams.get('vertical'),
   glass: initialParams.get('glass'),
+  windows10Style: initialParams.get('windows10Style'),
 });
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -92,7 +98,7 @@ let widgetVisible = false;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 function formatTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return '--:--';
+  if (!Number.isFinite(seconds) || seconds < 0) return '-:--';
   const total = Math.max(0, Math.floor(seconds + 0.0001));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -124,7 +130,7 @@ function updateProgress() {
     lastElapsedText = elapsedText;
   }
 
-  const totalText = duration > 0 ? formatTime(duration) : '--:--';
+  const totalText = duration > 0 ? formatTime(duration) : '-:--';
   if (totalText !== lastTotalText) {
     totalEl.textContent = totalText;
     lastTotalText = totalText;
