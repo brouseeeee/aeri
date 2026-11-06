@@ -5,10 +5,12 @@ const {
   BrowserWindow,
   Menu,
   Tray,
+  dialog,
   ipcMain,
   nativeImage,
   screen,
 } = require('electron');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -21,16 +23,22 @@ const VOLUME = { width: 40, height: 128 };
 const PANEL_GAP = 10;
 const WINDOW_WIDTH = PLAYER.width + VOLUME.width + PANEL_GAP + STAGE_PADDING * 2;
 const WINDOW_HEIGHT = Math.max(PLAYER.height, VOLUME.height) + STAGE_PADDING * 2;
+const WINDOWS10_WINDOW = { width: 568, height: 176 };
+const WINDOWS10_EDGE_GAP = { horizontal: 48, vertical: 56 };
 const INITIAL_VISIBLE_MS = 4500;
 const LEAVE_VISIBLE_MS = 2000;
 const MOCK = process.argv.includes('--mock');
 const MOCK_STATIC = process.argv.includes('--mock-static');
+const WINDOWS_BUILD = Number(os.release().split('.')[2]) || 0;
+const IS_WINDOWS_10 = process.platform === 'win32' && WINDOWS_BUILD >= 10240 && WINDOWS_BUILD < 22000;
 
 let win = null;
 let tray = null;
 let bridge = null;
 let bridgeBuffer = '';
 let bridgeRestartTimer = null;
+let rendererWatcher = null;
+let rendererReloadTimer = null;
 let quitting = false;
 let rendererReady = false;
 
@@ -40,12 +48,20 @@ let lastStatus = null;
 let sawFirstState = false;
 let lastArt = null;
 let lastArtId = null;
+let lastAppIcon = null;
+let lastAppIconId = null;
+let appIconRequest = 0;
 
 let windowSide = 'right';
 let windowVertical = 'bottom';
 let liquidGlass = true;
+let windows10Style = false;
+let showOnTrackChange = true;
+let showOnVolumeChange = true;
 let trayMenu = null;
+let lastVolumeSnapshot = null;
 let dragging = false;
+let customWindowDrag = null;
 let snapping = false;
 let snapTimer = null;
 let snapStartTimer = null;
@@ -137,6 +153,18 @@ function armHide(delay = INITIAL_VISIBLE_MS) {
 }
 
 function panelRects(bounds) {
+  if (windows10Style) {
+    return {
+      player: {
+        x: bounds.x,
+        y: bounds.y,
+        width: WINDOWS10_WINDOW.width,
+        height: WINDOWS10_WINDOW.height,
+      },
+      volume: null,
+    };
+  }
+
   const y = bounds.y + STAGE_PADDING;
   if (windowSide === 'left') {
     return {
@@ -174,7 +202,7 @@ function cursorInsidePanel() {
   if (!win || win.isDestroyed()) return false;
   const point = screen.getCursorScreenPoint();
   const rects = panelRects(win.getBounds());
-  return [rects.player, rects.volume].some(
+  return [rects.player, rects.volume].filter(Boolean).some(
     (rect) =>
       point.x >= rect.x &&
       point.x <= rect.x + rect.width &&
@@ -208,6 +236,7 @@ function sendLayout() {
     side: windowSide,
     vertical: windowVertical,
     glass: liquidGlass,
+    windows10Style,
   });
 }
 
@@ -237,7 +266,10 @@ function saveCorner() {
 function loadSettings() {
   try {
     const data = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    if (data && typeof data.liquidGlass === 'boolean') liquidGlass = data.liquidGlass;
+    windows10Style = Boolean(data && data.windows10Style === true);
+    showOnTrackChange = !data || data.showOnTrackChange !== false;
+    showOnVolumeChange = !data || data.showOnVolumeChange !== false;
+    liquidGlass = !windows10Style;
   } catch {
     /* first launch or unreadable settings */
   }
@@ -245,47 +277,127 @@ function loadSettings() {
 
 function saveSettings() {
   try {
-    fs.writeFileSync(settingsFile, JSON.stringify({ liquidGlass }));
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        liquidGlass,
+        windows10Style,
+        showOnTrackChange,
+        showOnVolumeChange,
+      })
+    );
+    return true;
   } catch (error) {
     log('settings save failed:', error.message);
+    return false;
   }
 }
 
-function setLiquidGlass(enabled) {
-  const next = Boolean(enabled);
-  if (next === liquidGlass) {
-    if (trayMenu) {
-      const item = trayMenu.getMenuItemById('liquid-glass');
-      if (item) item.checked = liquidGlass;
-    }
-    return;
-  }
+function setBooleanSetting(name, value) {
+  const previous = name === 'track' ? showOnTrackChange : showOnVolumeChange;
+  if (name === 'track') showOnTrackChange = value;
+  else showOnVolumeChange = value;
 
-  liquidGlass = next;
-  saveSettings();
-  if (trayMenu) {
-    const item = trayMenu.getMenuItemById('liquid-glass');
-    if (item) item.checked = liquidGlass;
+  if (!saveSettings()) {
+    if (name === 'track') showOnTrackChange = previous;
+    else showOnVolumeChange = previous;
+    dialog.showErrorBox('Aeri', 'Не удалось сохранить настройку. Проверьте доступ к файлу настроек.');
   }
-  sendLayout();
+  refreshTrayMenu();
+}
+
+function setWidgetStyle(style) {
+  liquidGlass = style === 'liquid-glass';
+  windows10Style = style === 'windows-10';
+  saveSettings();
+  refreshTrayMenu();
+  if (win && !win.isDestroyed()) {
+    positionWindow(screen.getDisplayMatching(win.getBounds()));
+  }
+  loadRenderer();
   showWidget('manual');
+}
+
+function windowSize() {
+  return windows10Style
+    ? WINDOWS10_WINDOW
+    : { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
 }
 
 function moveWindowTo(x, y) {
   if (!win || win.isDestroyed()) return;
+  const { width, height } = windowSize();
   win.setBounds({
     x: Math.round(x),
     y: Math.round(y),
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
+    width,
+    height,
   });
+}
+
+function beginWindowDrag(x, y) {
+  if (
+    !windows10Style ||
+    !win ||
+    win.isDestroyed() ||
+    windowState !== 'visible' ||
+    customWindowDrag ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    return;
+  }
+
+  cancelPendingHide();
+  clearHideTimers();
+  if (snapping) cancelSnapAnimation();
+  customWindowDrag = {
+    cursor: { x, y },
+    bounds: win.getBounds(),
+  };
+  dragging = true;
+  send('widget:dragging', true);
+  if (process.env.GLASS_DEBUG) {
+    log('pointer drag start:', JSON.stringify(customWindowDrag.bounds));
+  }
+}
+
+function moveWindowDrag(x, y) {
+  if (
+    !customWindowDrag ||
+    !win ||
+    win.isDestroyed() ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    return;
+  }
+  moveWindowTo(
+    customWindowDrag.bounds.x + x - customWindowDrag.cursor.x,
+    customWindowDrag.bounds.y + y - customWindowDrag.cursor.y
+  );
+}
+
+function endWindowDrag() {
+  if (!customWindowDrag) return;
+  customWindowDrag = null;
+  if (process.env.GLASS_DEBUG && win && !win.isDestroyed()) {
+    log('pointer drag end:', JSON.stringify(win.getBounds()));
+  }
+  snapToNearestCorner();
 }
 
 function positionWindow(display) {
   const area = display.workArea;
-  const x = windowSide === 'left' ? area.x : area.x + area.width - WINDOW_WIDTH;
-  const y =
-    windowVertical === 'top' ? area.y : area.y + area.height - WINDOW_HEIGHT;
+  const { width, height } = windowSize();
+  const horizontalGap = windows10Style ? WINDOWS10_EDGE_GAP.horizontal : 0;
+  const verticalGap = windows10Style ? WINDOWS10_EDGE_GAP.vertical : 0;
+  const x = windowSide === 'left'
+    ? area.x + horizontalGap
+    : area.x + area.width - width - horizontalGap;
+  const y = windowVertical === 'top'
+    ? area.y + verticalGap
+    : area.y + area.height - height - verticalGap;
   if (process.env.GLASS_DEBUG) {
     log(
       'position window:',
@@ -397,6 +509,7 @@ function animateWindowTo(targetX, targetY, duration, done) {
   const start = win.getBounds();
   const startX = start.x;
   const startY = start.y;
+  const { width, height } = windowSize();
   const startedAt = Date.now();
   snapping = true;
   dragging = false;
@@ -427,8 +540,8 @@ function animateWindowTo(targetX, targetY, duration, done) {
       win.setBounds({
         x: nextX,
         y: nextY,
-        width: WINDOW_WIDTH,
-        height: WINDOW_HEIGHT,
+        width,
+        height,
       });
     } catch (error) {
       fail(error, { nextX, nextY, startX, startY, targetX, targetY, duration, progress });
@@ -444,8 +557,8 @@ function animateWindowTo(targetX, targetY, duration, done) {
       win.setBounds({
         x: Math.round(targetX),
         y: Math.round(targetY),
-        width: WINDOW_WIDTH,
-        height: WINDOW_HEIGHT,
+        width,
+        height,
       });
     } catch (error) {
       log('snap final position failed:', error.message);
@@ -473,9 +586,15 @@ async function snapToNearestCorner() {
     bounds.x + bounds.width / 2 < area.x + area.width / 2 ? 'left' : 'right';
   const vertical =
     bounds.y + bounds.height / 2 < area.y + area.height / 2 ? 'top' : 'bottom';
-  const targetX = side === 'left' ? area.x : area.x + area.width - WINDOW_WIDTH;
-  const targetY =
-    vertical === 'top' ? area.y : area.y + area.height - WINDOW_HEIGHT;
+  const { width, height } = windowSize();
+  const horizontalGap = windows10Style ? WINDOWS10_EDGE_GAP.horizontal : 0;
+  const verticalGap = windows10Style ? WINDOWS10_EDGE_GAP.vertical : 0;
+  const targetX = side === 'left'
+    ? area.x + horizontalGap
+    : area.x + area.width - width - horizontalGap;
+  const targetY = vertical === 'top'
+    ? area.y + verticalGap
+    : area.y + area.height - height - verticalGap;
   if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) {
     log('snap target invalid:', display.id, JSON.stringify(area));
     dragging = false;
@@ -525,15 +644,41 @@ function trackKey(state) {
   return [state.source || '', state.title || '', state.artist || '', state.album || ''].join('\u001f');
 }
 
+function observeVolumeChange(state) {
+  if (typeof state.volume !== 'number' || !Number.isFinite(state.volume)) return;
+
+  const next = {
+    volume: state.volume,
+    muted: Boolean(state.muted),
+  };
+  const previous = lastVolumeSnapshot;
+  lastVolumeSnapshot = next;
+  if (
+    previous &&
+    (Math.abs(next.volume - previous.volume) >= 0.005 || next.muted !== previous.muted) &&
+    showOnVolumeChange
+  ) {
+    showWidget('volume');
+  }
+}
+
 function publishState(state) {
   latestState = state;
+  observeVolumeChange(state);
+  let artworkChanged = false;
   if (typeof state.art === 'string' && state.art.length > 0) {
     lastArt = state.art;
     lastArtId = state.artId;
+    artworkChanged = true;
   } else if (state.art === null || (state.artId && state.artId !== lastArtId)) {
     lastArt = null;
     lastArtId = state.artId ?? null;
+    artworkChanged = true;
   }
+  if (artworkChanged) {
+    send('widget:art', { artId: lastArtId, art: lastArt });
+  }
+  if (Object.prototype.hasOwnProperty.call(state, 'appIcon')) publishAppIcon(state);
   send('widget:state', state);
 
   if (!state.session) {
@@ -561,17 +706,101 @@ function publishState(state) {
   lastTrackKey = key;
   lastStatus = status;
 
-  if (changedTrack || paused) {
-    showWidget(changedTrack ? 'track' : 'pause');
+  if ((changedTrack && showOnTrackChange) || paused) {
+    showWidget(changedTrack && showOnTrackChange ? 'track' : 'pause');
   }
 }
 
 function publishVolume(payload) {
+  observeVolumeChange(payload);
   send('widget:volume', payload);
+}
+
+function publishArt(payload) {
+  if (!latestState || payload.artId !== latestState.artId) return;
+  lastArtId = payload.artId;
+  lastArt = typeof payload.art === 'string' && payload.art.length > 0 ? payload.art : null;
+  latestState.art = lastArt;
+  send('widget:art', { artId: lastArtId, art: lastArt });
+}
+
+function publishAppIcon(payload) {
+  if (!latestState || (payload.appIconId && payload.appIconId !== latestState.source)) return;
+  const request = ++appIconRequest;
+  lastAppIconId = payload.appIconId || payload.source || latestState.source || null;
+  lastAppIcon = typeof payload.appIcon === 'string' && payload.appIcon.length > 0
+    ? normalizeAppIcon(payload.appIcon, lastAppIconId)
+    : null;
+  latestState.appIcon = lastAppIcon;
+  latestState.appIconId = lastAppIconId;
+  latestState.appIconPath = payload.appIconPath || null;
+  send('widget:app-icon', { appIconId: lastAppIconId, appIcon: lastAppIcon });
+  if (!lastAppIcon && typeof payload.appIconPath === 'string' && payload.appIconPath.length > 0) {
+    loadAppIconFromPath(payload.appIconPath, lastAppIconId, request);
+  }
 }
 
 function publishSeek(payload) {
   send('widget:seek', payload);
+}
+
+function normalizeAppIcon(dataUri, source) {
+  try {
+    const image = nativeImage.createFromDataURL(dataUri);
+    if (image.isEmpty()) throw new Error('unsupported or empty image data');
+    return resizeAppIcon(image, source);
+  } catch (error) {
+    log('application icon decode failed:', source, error.message);
+    return null;
+  }
+}
+
+function resizeAppIcon(image, source) {
+  try {
+    if (image.isEmpty()) throw new Error('empty image');
+    const size = image.getSize();
+    const bitmap = image.getBitmap();
+    if (size.width > 0 && size.height > 0 && bitmap.length >= size.width * size.height * 4) {
+      let left = size.width;
+      let top = size.height;
+      let right = -1;
+      let bottom = -1;
+      for (let y = 0; y < size.height; y += 1) {
+        for (let x = 0; x < size.width; x += 1) {
+          if (bitmap[(y * size.width + x) * 4 + 3] === 0) continue;
+          left = Math.min(left, x);
+          top = Math.min(top, y);
+          right = Math.max(right, x);
+          bottom = Math.max(bottom, y);
+        }
+      }
+      if (right >= left && bottom >= top) {
+        image = image.crop({
+          x: left,
+          y: top,
+          width: right - left + 1,
+          height: bottom - top + 1,
+        });
+      }
+    }
+    return image.resize({ width: 32, height: 32 }).toDataURL();
+  } catch (error) {
+    log('application icon resize failed:', source, error.message);
+    return null;
+  }
+}
+
+function loadAppIconFromPath(iconPath, source, request) {
+  Promise.resolve().then(() => app.getFileIcon(iconPath, { size: 'normal' })).then((image) => {
+    if (request !== appIconRequest) return;
+    lastAppIcon = resizeAppIcon(image, source);
+    send('widget:app-icon', { appIconId: source, appIcon: lastAppIcon });
+  }).catch((error) => {
+    if (request !== appIconRequest) return;
+    lastAppIcon = null;
+    log('application icon lookup failed:', source, error.message);
+    send('widget:app-icon', { appIconId: source, appIcon: null });
+  });
 }
 
 function handleBridgeLine(line) {
@@ -586,6 +815,8 @@ function handleBridgeLine(line) {
   if (message.type === 'state') publishState(message);
   else if (message.type === 'volume') publishVolume(message);
   else if (message.type === 'seek') publishSeek(message);
+  else if (message.type === 'art') publishArt(message);
+  else if (message.type === 'appIcon') publishAppIcon(message);
 }
 
 function bridgeCommand(command) {
@@ -627,6 +858,7 @@ function startBridge() {
       PYTHONIOENCODING: 'utf-8',
     },
   });
+  if (IS_WINDOWS_10) bridgeCommand({ cmd: 'setVolumeOsdHidden', value: true });
 
   bridge.stdout.setEncoding('utf8');
   bridge.stderr.setEncoding('utf8');
@@ -716,9 +948,10 @@ function startMock() {
 }
 
 function createWindow() {
+  const { width, height } = windowSize();
   win = new BrowserWindow({
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
+    width,
+    height,
     show: false,
     frame: false,
     transparent: true,
@@ -747,6 +980,7 @@ function createWindow() {
   win.setAlwaysOnTop(true, 'floating');
   win.setSkipTaskbar(true);
   win.on('will-move', () => {
+    if (customWindowDrag) return;
     cancelPendingHide();
     clearTimeout(snapStartTimer);
     snapStartTimer = null;
@@ -759,6 +993,7 @@ function createWindow() {
     }
   });
   win.on('moved', () => {
+    if (customWindowDrag) return;
     cancelPendingHide();
     if (process.env.GLASS_DEBUG) log('drag end:', JSON.stringify(win.getBounds()));
     if (!dragging) {
@@ -772,22 +1007,20 @@ function createWindow() {
       if (dragging) snapToNearestCorner();
     }, 24);
   });
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'), {
-    query: {
-      side: windowSide,
-      vertical: windowVertical,
-      glass: liquidGlass ? 'on' : 'off',
-    },
-  });
+  loadRenderer();
 
   win.webContents.on('did-finish-load', () => {
     rendererReady = true;
     log('renderer ready');
     const initialDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     sendLayout();
+    send('widget:visibility', windowState !== 'hidden');
     positionWindow(initialDisplay);
     if (latestState) send('widget:state', latestState);
     if (lastArt) send('widget:art', { artId: lastArtId, art: lastArt });
+    if (lastAppIconId) {
+      send('widget:app-icon', { appIconId: lastAppIconId, appIcon: lastAppIcon });
+    }
     if (latestState && latestState.session && windowState === 'hidden') {
       sawFirstState = true;
       lastTrackKey = trackKey(latestState);
@@ -804,37 +1037,113 @@ function createWindow() {
 
 }
 
+function loadRenderer() {
+  if (!win || win.isDestroyed()) return;
+  rendererReady = false;
+  const rendererDir = path.join(__dirname, 'renderer');
+  const page = windows10Style
+    ? path.join(rendererDir, 'themes', 'windows-10', 'windows-10.html')
+    : path.join(rendererDir, 'themes', 'liquid-glass', 'liquid-glass.html');
+
+  win.loadFile(page, {
+    query: {
+      side: windowSide,
+      vertical: windowVertical,
+      glass: liquidGlass ? 'on' : 'off',
+      windows10Style: windows10Style ? 'on' : 'off',
+    },
+  }).catch((error) => log('renderer load failed:', error.message));
+}
+
+function watchRendererFiles() {
+  if (app.isPackaged) return;
+
+  const rendererDir = path.join(__dirname, 'renderer');
+  try {
+    rendererWatcher = fs.watch(rendererDir, { recursive: true }, (_event, filename) => {
+      if (filename && !/\.(html|css|js)$/i.test(filename.toString())) return;
+      clearTimeout(rendererReloadTimer);
+      rendererReloadTimer = setTimeout(() => {
+        rendererReloadTimer = null;
+        if (quitting || !win || win.isDestroyed()) return;
+        log('renderer files changed; reloading');
+        loadRenderer();
+      }, 200);
+    });
+    rendererWatcher.on('error', (error) => {
+      log('renderer file watcher error:', error.message);
+    });
+    log('watching renderer files for changes');
+  } catch (error) {
+    log('renderer file watcher failed:', error.message);
+  }
+}
+
+
 function buildTray() {
   try {
     const icon = nativeImage.createFromPath(path.join(ROOT, 'assets', 'tray.png'));
     tray = new Tray(icon);
     tray.setToolTip('Aeri');
-    trayMenu = Menu.buildFromTemplate([
-      {
-        label: 'Показать виджет',
-        click: () => showWidget('manual'),
-      },
-      {
-        id: 'liquid-glass',
-        label: 'Liquid glass',
-        type: 'checkbox',
-        checked: liquidGlass,
-        click: (item) => setLiquidGlass(item.checked),
-      },
-      { type: 'separator' },
-      {
-        label: 'Выход',
-        click: () => app.quit(),
-      },
-    ]);
-    tray.setContextMenu(trayMenu);
+    refreshTrayMenu();
     tray.on('click', () => showWidget('manual'));
   } catch (error) {
     log('tray failed:', error.message);
   }
 }
 
+function refreshTrayMenu() {
+  if (!tray) return;
+  const settingsMenu = [
+    {
+      label: 'Показывать виджет при смене трека',
+      type: 'checkbox',
+      checked: showOnTrackChange,
+      click: (item) => setBooleanSetting('track', item.checked),
+    },
+    {
+      label: 'Показывать виджет при изменении громкости',
+      type: 'checkbox',
+      checked: showOnVolumeChange,
+      click: (item) => setBooleanSetting('volume', item.checked),
+    },
+  ];
+  trayMenu = Menu.buildFromTemplate([
+    {
+      label: 'Показать виджет',
+      click: () => showWidget('manual'),
+    },
+    {
+      id: 'liquid-glass',
+      label: 'Liquid glass',
+      type: 'radio',
+      checked: liquidGlass,
+      click: () => setWidgetStyle('liquid-glass'),
+    },
+    {
+      id: 'windows-10-style',
+      label: 'Windows 10 style',
+      type: 'radio',
+      checked: windows10Style,
+      click: () => setWidgetStyle('windows-10'),
+    },
+    {
+      label: 'Настройки',
+      submenu: settingsMenu,
+    },
+    { type: 'separator' },
+    {
+      label: 'Выход',
+      click: () => app.quit(),
+    },
+  ]);
+  tray.setContextMenu(trayMenu);
+}
+
 function registerIpc() {
+  ipcMain.on('glass:windowDrag:start', (_event, x, y) => beginWindowDrag(x, y));
+  ipcMain.on('glass:windowDrag:move', (_event, x, y) => moveWindowDrag(x, y));
+  ipcMain.on('glass:windowDrag:end', () => endWindowDrag());
   ipcMain.on('glass:hover', (_event, value) => {
     hovered = Boolean(value);
     if (hovered) {
@@ -924,6 +1233,9 @@ function registerIpc() {
   ipcMain.on('glass:requestState', () => {
     if (latestState) send('widget:state', latestState);
     if (lastArt) send('widget:art', { artId: lastArtId, art: lastArt });
+    if (lastAppIconId) {
+      send('widget:app-icon', { appIconId: lastAppIconId, appIcon: lastAppIcon });
+    }
   });
 }
 
@@ -959,6 +1271,7 @@ if (!gotLock) {
     }
     registerIpc();
     createWindow();
+    watchRendererFiles();
     buildTray();
     setInterval(syncCursorHover, 140);
     if (MOCK) startMock();
@@ -974,9 +1287,14 @@ if (!gotLock) {
     clearHideTimers();
     clearTimeout(hideCompleteTimer);
     clearTimeout(bridgeRestartTimer);
+    clearTimeout(rendererReloadTimer);
     clearTimeout(snapStartTimer);
     clearTimeout(snapTimer);
     clearInterval(mockTimer);
+    if (rendererWatcher) {
+      rendererWatcher.close();
+      rendererWatcher = null;
+    }
     if (bridge) {
       try {
         bridgeCommand({ cmd: 'shutdown' });

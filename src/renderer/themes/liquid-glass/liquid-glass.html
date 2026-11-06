@@ -7,7 +7,8 @@
       content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     />
     <title>Aeri</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="../../style.css" />
+    <link rel="stylesheet" href="liquid-glass.css" />
   </head>
   <body>
     <div
@@ -16,6 +17,7 @@
       data-side="right"
       data-vertical="bottom"
       data-glass="on"
+      data-windows10-style="off"
     >
       <main class="widget" id="widget" aria-live="polite">
         <div class="content">
@@ -101,7 +103,7 @@
               </div>
               <div class="time-row">
                 <span class="time-elapsed" id="elapsed">0:00</span>
-                <span class="time-total" id="total">--:--</span>
+                <span class="time-total" id="total">-:--</span>
               </div>
             </div>
           </div>
@@ -153,6 +155,6 @@
       </aside>
     </div>
 
-    <script src="renderer.js"></script>
+    <script src="../../renderer.js"></script>
   </body>
 </html>
