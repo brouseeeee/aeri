@@ -451,7 +451,7 @@ async function showWidget(reason = 'manual') {
   if (latestState) send('widget:state', latestState);
 
   win.showInactive();
-  win.setAlwaysOnTop(true, 'floating');
+  win.setAlwaysOnTop(true, 'screen-saver');
   windowState = 'visible';
   send('widget:visibility', true);
   syncCursorHover();
@@ -977,7 +977,7 @@ function createWindow() {
   });
 
   win.setMenu(null);
-  win.setAlwaysOnTop(true, 'floating');
+  win.setAlwaysOnTop(true, 'screen-saver');
   win.setSkipTaskbar(true);
   win.on('will-move', () => {
     if (customWindowDrag) return;
