@@ -8,16 +8,12 @@ $python = Join-Path $root ".venv\Scripts\python.exe"
 $bridge = Join-Path $root "native\bridge.py"
 $native = Join-Path $root "native"
 $output = Join-Path $native "media-bridge.exe"
-$uiautomationDll = Join-Path $root ".venv\Lib\site-packages\uiautomation\bin\UIAutomationClient_VC140_X64.dll"
 
 if (-not (Test-Path -LiteralPath $python)) {
   throw "Python venv not found at $python. Create it with: py -3.11 -m venv .venv"
 }
 if (-not (Test-Path -LiteralPath $bridge)) {
   throw "Bridge source not found at $bridge"
-}
-if (-not (Test-Path -LiteralPath $uiautomationDll)) {
-  throw "UI Automation runtime DLL not found at $uiautomationDll"
 }
 
 if (-not $SkipInstall) {
@@ -37,13 +33,8 @@ Write-Host "Building media-bridge.exe..." -ForegroundColor Cyan
   --workpath (Join-Path $root "build\pyinstaller") `
   --specpath (Join-Path $root "build\pyinstaller") `
   --hidden-import winrt.windows.foundation.collections `
-  --hidden-import winrt.windows.applicationmodel `
-  --hidden-import winrt.windows.applicationmodel.core `
-  --hidden-import winrt.windows.management.deployment `
   --hidden-import winrt.windows.storage.streams `
   --hidden-import winrt.windows.media.control `
-  --hidden-import uiautomation `
-  --add-binary "$uiautomationDll;uiautomation\bin" `
   --exclude-module tkinter `
   $bridge
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
