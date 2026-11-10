@@ -388,6 +388,7 @@ button::before {
   object-fit: cover;
   box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.6);
   opacity: 0;
+  visibility: hidden;
   transition: opacity 200ms ease;
 }
 
@@ -400,15 +401,18 @@ button::before {
   object-fit: cover;
   filter: blur(40px);
   opacity: 0;
+  visibility: hidden;
   transition: opacity 200ms ease;
 }
 
 .cover.has-art .cover-art-blur {
   opacity: 1;
+  visibility: visible;
 }
 
 .cover.has-art .cover-art {
   opacity: 1;
+  visibility: visible;
 }
 
 .cover-placeholder {
@@ -576,7 +580,7 @@ button::before {
 .title-text {
   display: block;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: visible;
   text-overflow: ellipsis;
   font-weight: var(--font-weight-light);
   font-size: var(--font-size-32);
@@ -585,7 +589,7 @@ button::before {
 .author-text {
   display: block;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: visible;
   text-overflow: ellipsis;
   font-weight: var(--font-weight-regular);
   font-size: var(--font-size-16);

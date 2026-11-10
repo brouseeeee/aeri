@@ -342,18 +342,38 @@ function setCoverArt(art) {
   const request = ++coverArtRequest;
   cover.classList.remove("has-art");
   coverArt.dataset.art = art;
-  coverArt.onload = () => {
-    if (request === coverArtRequest) cover.classList.add("has-art");
-  };
-  coverArt.onerror = () => {
-    if (request !== coverArtRequest) return;
+  coverArt.removeAttribute("src");
+  if (coverArtBlur) coverArtBlur.removeAttribute("src");
+
+  const images = coverArtBlur ? [coverArt, coverArtBlur] : [coverArt];
+  const settled = new Set();
+  let pending = images.length;
+  let failed = false;
+  const fail = () => {
+    if (failed || request !== coverArtRequest) return;
+    failed = true;
     coverArt.removeAttribute("src");
     if (coverArtBlur) coverArtBlur.removeAttribute("src");
     delete coverArt.dataset.art;
     console.warn("Cover art could not be loaded; showing the default avatar.");
   };
-  if (coverArtBlur) coverArtBlur.src = art;
-  coverArt.src = art;
+  const loaded = (image) => {
+    if (request !== coverArtRequest || failed || settled.has(image)) return;
+    settled.add(image);
+    if (!image.naturalWidth || !image.naturalHeight) {
+      fail();
+      return;
+    }
+    pending -= 1;
+    if (pending === 0) cover.classList.add("has-art");
+  };
+
+  for (const image of images) {
+    image.onload = () => loaded(image);
+    image.onerror = fail;
+    image.src = art;
+    if (image.complete) loaded(image);
+  }
 }
 
 function setAppIcon(icon) {

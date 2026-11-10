@@ -1,0 +1,519 @@
+@font-face {
+  font-family: "Aeri Segoe UI Variable";
+  src: url("SegoeUIVF.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aeri Segoe Fluent Icons";
+  src: url("Segoe Fluent Icons.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+.stage[data-windows11-style="on"] {
+  --pad: 0px;
+  --gap: 16px;
+  --player-w: 480px;
+  --player-h: 178px;
+  --volume-w: 48px;
+  --volume-h: 178px;
+  font-family: "Aeri Segoe UI Variable", "Segoe UI", sans-serif;
+}
+
+.stage[data-windows11-style="on"] button,
+.stage[data-windows11-style="on"] .title,
+.stage[data-windows11-style="on"] .artist,
+.stage[data-windows11-style="on"] .time-row,
+.stage[data-windows11-style="on"] .volume-value {
+  font-family: inherit;
+}
+
+.stage[data-windows11-style="on"] .widget,
+.stage[data-windows11-style="on"] .volume-panel {
+  top: 0;
+  height: 178px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(117, 117, 117, 0.4);
+  border-radius: 8px;
+  background: rgba(32, 32, 32, 0.96);
+  box-shadow: none;
+}
+
+.stage[data-windows11-style="on"] .widget::before,
+.stage[data-windows11-style="on"] .volume-panel::before {
+  inset: 0;
+  background:
+    url("noise.png"),
+    linear-gradient(0deg, rgba(32, 32, 32, 0.5), rgba(32, 32, 32, 0.5)),
+    rgba(32, 32, 32, 0.96);
+  background-blend-mode: normal, color, luminosity;
+  border-radius: 8px;
+  box-shadow: none;
+  opacity: 0.03;
+  backdrop-filter: blur(37.5207px);
+}
+
+.stage[data-windows11-style="on"] .widget::before {
+  inset: 1px;
+}
+
+.stage[data-windows11-style="on"] .widget::after {
+  border-radius: inherit;
+  display: none;
+}
+
+.stage[data-windows11-style="on"] .widget {
+  isolation: isolate;
+}
+
+.stage[data-windows11-style="on"] .widget > .content,
+.stage[data-windows11-style="on"] .volume-panel > .volume-row {
+  position: relative;
+  z-index: 1;
+}
+
+.stage[data-windows11-style="on"] .widget {
+  width: 480px;
+  border-radius: 8px;
+}
+
+.stage[data-windows11-style="on"] .widget {
+  left: 64px;
+}
+
+.stage[data-windows11-style="on"] .volume-panel {
+  width: 48px;
+  border-radius: 8.75px;
+}
+
+.stage[data-windows11-style="on"] .volume-panel {
+  left: 0;
+}
+
+.stage[data-windows11-style="on"] .cover-glow {
+  display: block;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  width: 225px;
+  height: 178px;
+  overflow: visible;
+  opacity: 1;
+  pointer-events: none;
+}
+
+.stage[data-windows11-style="on"] .cover-glow:not(.has-art) {
+  visibility: hidden;
+}
+
+.stage[data-windows11-style="on"] .widget.cover-revealing .cover-glow {
+  animation: windows11-cover-glow-in 720ms ease-out both;
+}
+
+.stage[data-windows11-style="on"] .cover-glow img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 225px;
+  height: 178px;
+  object-fit: cover;
+  filter: blur(40px);
+}
+
+.stage[data-windows11-style="on"] .content {
+  gap: 16px;
+  padding: 0 0 0 32px;
+}
+
+.stage[data-windows11-style="on"] .details {
+  order: 0;
+  position: relative;
+  display: block;
+  flex: 0 0 254px;
+  align-self: center;
+  height: 144px;
+  min-width: 0;
+}
+
+.stage[data-windows11-style="on"] .cover-shell {
+  order: 1;
+  flex: 0 0 176px;
+  width: 176px;
+  height: 176px;
+  border-radius: 0 8px 8px 0;
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+
+.stage[data-windows11-style="on"] .cover-shell::before,
+.stage[data-windows11-style="on"] .cover-shell::after {
+  display: none;
+}
+
+.stage[data-windows11-style="on"] .cover-wrap {
+  border-radius: 0 8px 8px 0;
+  box-shadow: none;
+}
+
+.stage[data-windows11-style="on"] .widget.cover-revealing .cover-wrap #cover {
+  animation: windows11-cover-in 560ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
+}
+
+@keyframes windows11-cover-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px) scale(1.045);
+    filter: brightness(1.2);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes windows11-cover-glow-in {
+  from {
+    opacity: 0.25;
+    filter: brightness(1.35);
+  }
+  to {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+.stage[data-windows11-style="on"] .meta {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  width: 254px;
+  height: 48px;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.stage[data-windows11-style="on"] .title {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 24px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+.stage[data-windows11-style="on"] .artist {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 16px;
+  margin: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+.stage[data-windows11-style="on"] .seek-area {
+  position: absolute;
+  top: 72px;
+  left: 0;
+  flex: none;
+  width: 254px;
+  height: 16px;
+  margin: 0;
+}
+
+.stage[data-windows11-style="on"] .seek-row {
+  position: absolute;
+  top: 0;
+  left: 25px;
+  width: 109px;
+  height: 16px;
+}
+
+.stage[data-windows11-style="on"] .seek {
+  width: 100%;
+  height: 16px;
+}
+
+.stage[data-windows11-style="on"] .seek-rail {
+  height: 4px;
+  border-radius: 2px;
+  background: #9f9f9f;
+  box-shadow: none;
+}
+
+.stage[data-windows11-style="on"] .seek-fill {
+  background: #4cc2ff;
+  transition: transform 250ms linear;
+}
+
+.stage[data-windows11-style="on"] .widget.timeline-restarting .seek-fill {
+  transition-duration: 900ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stage[data-windows11-style="on"] .widget.seeking .seek-fill,
+.stage[data-windows11-style="on"] .seek.dragging .seek-fill {
+  transition: none;
+}
+
+.stage[data-windows11-style="on"] .seek-knob {
+  display: none;
+}
+
+.stage[data-windows11-style="on"] .time-row {
+  position: absolute;
+  inset: 0;
+  display: block;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 300;
+  line-height: 100%;
+  text-shadow: none;
+}
+
+.stage[data-windows11-style="on"] .time-elapsed,
+.stage[data-windows11-style="on"] .time-total {
+  position: absolute;
+  top: 3px;
+  color: inherit;
+}
+
+.stage[data-windows11-style="on"] .time-elapsed {
+  left: 0;
+}
+
+.stage[data-windows11-style="on"] .time-total {
+  left: 142px;
+}
+
+.stage[data-windows11-style="on"] .controls {
+  position: absolute;
+  top: 96px;
+  left: 0;
+  order: 1;
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 254px;
+  height: 48px;
+}
+
+.stage[data-windows11-style="on"] .ctrl.skip,
+.stage[data-windows11-style="on"] .ctrl.play {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 8.75px;
+  color: #f3f3f3;
+  background: #313131;
+  box-shadow: none;
+  transition: background-color 0.15s ease, transform 0.12s ease;
+}
+
+.stage[data-windows11-style="on"] .ctrl svg {
+  display: none;
+}
+
+.stage[data-windows11-style="on"] .fluent-icon {
+  display: block;
+  font-family: "Aeri Segoe Fluent Icons";
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.stage[data-windows11-style="on"] .ctrl.play .icon-play,
+.stage[data-windows11-style="on"] .ctrl.play .icon-pause {
+  grid-area: 1 / 1;
+  place-self: center;
+}
+
+.stage[data-windows11-style="on"] .ctrl.play .icon-pause,
+.stage[data-windows11-style="on"] .widget.playing .ctrl.play .icon-play {
+  display: none;
+}
+
+.stage[data-windows11-style="on"] .widget.playing .ctrl.play .icon-pause {
+  display: block;
+}
+
+.stage[data-windows11-style="on"] .ctrl.skip:hover,
+.stage[data-windows11-style="on"] .ctrl.play:hover {
+  color: #fff;
+  background: #414141;
+}
+
+.stage[data-windows11-style="on"] .ctrl.play {
+  background: #4cc2ff;
+  box-shadow: none;
+}
+
+.stage[data-windows11-style="on"] .ctrl.play:hover {
+  background: #65ccff;
+}
+
+.stage[data-windows11-style="on"] .volume-row {
+  justify-content: center;
+  gap: 8px;
+  padding: 0;
+  pointer-events: none;
+}
+
+.stage[data-windows11-style="on"] .volume {
+  order: 0;
+}
+
+.stage[data-windows11-style="on"] .volume-value {
+  order: 1;
+  flex: 0 0 16px;
+  box-sizing: border-box;
+  width: 18px;
+  height: 16px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: center;
+  opacity: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: none;
+  -webkit-app-region: no-drag;
+}
+
+.stage[data-windows11-style="on"] .volume {
+  flex: 0 0 120px;
+  width: 48px;
+  height: 120px;
+}
+
+.stage[data-windows11-style="on"] .volume-rail {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: #9f9f9f;
+  box-shadow: none;
+}
+
+.stage[data-windows11-style="on"] .volume-fill {
+  background: #4cc2ff;
+  box-shadow: none;
+  transition: transform 180ms ease-out;
+}
+
+.stage[data-windows11-style="on"] .volume.dragging .volume-fill {
+  transition: none;
+}
+
+.stage[data-windows11-style="on"] .volume-value:hover {
+  color: #4cc2ff;
+}
+
+.stage[data-windows11-style="on"] .volume-knob,
+.stage[data-windows11-style="on"] .volume-button {
+  display: none;
+}
+
+.stage[data-windows11-style="on"] .app-icon-frame {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: none;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  border: 1px solid rgba(117, 117, 117, 0.4);
+  border-radius: 8.75px;
+  background: rgba(32, 32, 32, 0.96);
+  box-shadow: none;
+  backdrop-filter: blur(37.5207px);
+}
+
+.stage[data-windows11-style="on"] .app-icon-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    url("noise.png"),
+    linear-gradient(0deg, rgba(32, 32, 32, 0.5), rgba(32, 32, 32, 0.5)),
+    rgba(32, 32, 32, 0.96);
+  background-blend-mode: normal, color, luminosity;
+  opacity: 0.03;
+  pointer-events: none;
+}
+
+.stage[data-windows11-style="on"] .app-icon-frame::after {
+  display: none;
+}
+
+.stage[data-windows11-style="on"] .app-icon-frame.has-icon {
+  display: block;
+}
+
+.stage[data-windows11-style="on"] #appIcon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  max-width: 16px;
+  max-height: 16px;
+  object-fit: contain;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage[data-windows11-style="on"] .ctrl.skip,
+  .stage[data-windows11-style="on"] .ctrl.play,
+  .stage[data-windows11-style="on"] .seek-fill,
+  .stage[data-windows11-style="on"] .volume-fill,
+  .stage[data-windows11-style="on"] .widget.cover-revealing .cover-glow,
+  .stage[data-windows11-style="on"] .widget.cover-revealing .cover-wrap #cover {
+    transition: none;
+    animation: none;
+  }
+}

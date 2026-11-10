@@ -184,6 +184,18 @@ img {
   pointer-events: none;
 }
 
+.fluent-icon {
+  display: none;
+}
+
+.cover-glow {
+  display: none;
+}
+
+.app-icon-frame {
+  display: none;
+}
+
 .cover-shell {
   position: relative;
   flex: 0 0 100px;
@@ -265,11 +277,13 @@ img {
   height: 100%;
   object-fit: cover;
   opacity: 0;
+  visibility: hidden;
   transition: opacity 0.2s ease;
 }
 
 .cover-wrap.has-art #cover {
   opacity: 1;
+  visibility: visible;
 }
 
 .cover-wrap.has-art .cover-fallback {
