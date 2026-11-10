@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import concurrent.futures
+import ctypes
 import hashlib
 import json
 import math
@@ -25,6 +26,7 @@ import threading
 import time
 import traceback
 import winreg
+from ctypes import wintypes
 from datetime import timezone
 
 from hide_volume_osd import VolumeOsdHider
@@ -157,27 +159,65 @@ def parse_media_time(value: str) -> float | None:
 
 class YandexMusicTimelineReader:
     def __init__(self) -> None:
+        self.user32 = ctypes.WinDLL("user32", use_last_error=True)
+        self.user32.IsWindow.argtypes = [wintypes.HWND]
+        self.user32.IsWindow.restype = wintypes.BOOL
+        self.user32.IsIconic.argtypes = [wintypes.HWND]
+        self.user32.IsIconic.restype = wintypes.BOOL
+        self.user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        self.user32.ShowWindow.restype = wintypes.BOOL
+        self.user32.GetClassNameW.argtypes = [
+            wintypes.HWND,
+            wintypes.LPWSTR,
+            ctypes.c_int,
+        ]
+        self.user32.GetClassNameW.restype = ctypes.c_int
+        self.user32.GetWindowTextW.argtypes = [
+            wintypes.HWND,
+            wintypes.LPWSTR,
+            ctypes.c_int,
+        ]
+        self.user32.GetWindowTextW.restype = ctypes.c_int
         self.window = None
         self.hwnd = 0
         self.slider = None
         self.position_text = None
         self.duration_text = None
         self.last_discovery_at = 0.0
-        self.last_restore_at = 0.0
 
-    def _ensure_visible(self, user32) -> bool:
-        if not self.hwnd or not user32.IsWindow(self.hwnd):
+    def _clear_controls(self) -> None:
+        self.window = None
+        self.hwnd = 0
+        self.slider = None
+        self.position_text = None
+        self.duration_text = None
+
+    def _is_yandex_window(self) -> bool:
+        if not self.hwnd or not self.user32.IsWindow(self.hwnd):
             return False
-        if not user32.IsIconic(self.hwnd):
+
+        class_name = ctypes.create_unicode_buffer(64)
+        if (
+            self.user32.GetClassNameW(self.hwnd, class_name, len(class_name)) == 0
+            or class_name.value != "ApplicationFrameWindow"
+        ):
+            return False
+
+        title = ctypes.create_unicode_buffer(256)
+        self.user32.GetWindowTextW(self.hwnd, title, len(title))
+        window_name = title.value or str(self.window.Name or "")
+        lowered_name = window_name.casefold()
+        return "музык" in lowered_name or "music" in lowered_name
+
+    def _ensure_visible(self) -> bool:
+        if not self._is_yandex_window():
+            return False
+        if not self.user32.IsIconic(self.hwnd):
             return True
 
-        now = time.monotonic()
-        if now - self.last_restore_at < 2.0:
-            return False
-        self.last_restore_at = now
-        user32.ShowWindow(self.hwnd, 4)
+        self.user32.ShowWindow(self.hwnd, 4)
         time.sleep(0.3)
-        return not user32.IsIconic(self.hwnd)
+        return not self.user32.IsIconic(self.hwnd)
 
     def _find_controls(self, auto) -> bool:
         window = auto.WindowControl(
@@ -188,13 +228,13 @@ class YandexMusicTimelineReader:
         if not window.Exists(1, 0.2):
             return False
 
-        import ctypes
         hwnd = int(window.NativeWindowHandle or 0)
-        if not hwnd or not ctypes.windll.user32.IsWindow(hwnd):
+        if not hwnd or not self.user32.IsWindow(hwnd):
             return False
         self.window = window
         self.hwnd = hwnd
-        if not self._ensure_visible(ctypes.windll.user32):
+        if not self._ensure_visible():
+            self._clear_controls()
             return False
 
         controls = [
@@ -232,20 +272,12 @@ class YandexMusicTimelineReader:
         return self.slider is not None or self.position_text is not None
 
     def read(self) -> tuple[float | None, float | None, float | None] | None:
-        import ctypes
         import uiautomation as auto
 
         with auto.UIAutomationInitializerInThread():
             now = time.monotonic()
-            if self.hwnd and not ctypes.windll.user32.IsWindow(self.hwnd):
-                self.window = None
-                self.hwnd = 0
-                self.slider = None
-                self.position_text = None
-                self.duration_text = None
-
-            if self.hwnd and not self._ensure_visible(ctypes.windll.user32):
-                return None
+            if self.window is not None and not self._is_yandex_window():
+                self._clear_controls()
 
             if self.window is None or (
                 self.slider is None
@@ -255,6 +287,9 @@ class YandexMusicTimelineReader:
                 self.last_discovery_at = now
                 if not self._find_controls(auto):
                     return None
+
+            if not self._ensure_visible():
+                return None
 
             position = (
                 parse_media_time(self.position_text.Name)
@@ -719,8 +754,10 @@ class Bridge:
         future = self.yandex_timeline_future
         if future is not None and future.done():
             try:
-                self.yandex_timeline = future.result()
-                self.yandex_progress_failed_at = 0.0
+                timeline = future.result()
+                if timeline is not None:
+                    self.yandex_timeline = timeline
+                    self.yandex_progress_failed_at = 0.0
             except Exception as exc:
                 if now - self.yandex_progress_failed_at >= 10.0:
                     log(f"Yandex Music timeline unavailable: {type(exc).__name__}: {exc}")
@@ -900,10 +937,7 @@ class Bridge:
         yandex_position = None
         yandex_duration = None
         progress_ratio = None
-        if (
-            duration <= 0
-            and source.casefold().startswith(YANDEX_MUSIC_AUMID_PREFIX)
-        ):
+        if source.casefold().startswith(YANDEX_MUSIC_AUMID_PREFIX):
             timeline = self._read_yandex_timeline(asyncio.get_running_loop())
             if timeline is not None:
                 yandex_position, yandex_duration, progress_ratio = timeline
