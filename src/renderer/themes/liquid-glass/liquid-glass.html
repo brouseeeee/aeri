@@ -9,6 +9,7 @@
     <title>Aeri</title>
     <link rel="stylesheet" href="../../style.css" />
     <link rel="stylesheet" href="liquid-glass.css" />
+    <link rel="stylesheet" href="../windows-11/windows-11.css" />
   </head>
   <body>
     <div
@@ -18,8 +19,12 @@
       data-vertical="bottom"
       data-glass="on"
       data-windows10-style="off"
+      data-windows11-style="off"
     >
       <main class="widget" id="widget" aria-live="polite">
+        <div class="cover-glow" id="coverGlow" aria-hidden="true">
+          <img id="coverBlur" alt="" draggable="false" />
+        </div>
         <div class="content">
           <div class="cover-shell" id="coverShell">
             <div class="cover-wrap" id="coverWrap">
@@ -37,6 +42,9 @@
                 </svg>
               </div>
               <img id="cover" alt="" draggable="false" />
+              <div class="app-icon-frame" id="appIconFrame" aria-hidden="true">
+                <img id="appIcon" alt="" draggable="false" />
+              </div>
             </div>
           </div>
 
@@ -53,6 +61,7 @@
                 type="button"
                 aria-label="Предыдущий трек"
               >
+                <span class="fluent-icon" aria-hidden="true">&#xF8AC;</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M18.7 5.6 9.8 12l8.9 6.4V5.6Z" fill="currentColor" />
                   <rect x="5.7" y="5.6" width="2.3" height="12.8" rx="1.15" fill="currentColor" />
@@ -64,6 +73,8 @@
                 type="button"
                 aria-label="Пауза"
               >
+                <span class="fluent-icon icon-play" aria-hidden="true">&#xF5B0;</span>
+                <span class="fluent-icon icon-pause" aria-hidden="true">&#xF8AE;</span>
                 <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M8.4 5.4 19.2 12 8.4 18.6V5.4Z" fill="currentColor" />
                 </svg>
@@ -78,6 +89,7 @@
                 type="button"
                 aria-label="Следующий трек"
               >
+                <span class="fluent-icon" aria-hidden="true">&#xF8AD;</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M5.3 5.6 14.2 12l-8.9 6.4V5.6Z" fill="currentColor" />
                   <rect x="16" y="5.6" width="2.3" height="12.8" rx="1.15" fill="currentColor" />

@@ -24,6 +24,9 @@ const PANEL_GAP = 10;
 const WINDOW_WIDTH = PLAYER.width + VOLUME.width + PANEL_GAP + STAGE_PADDING * 2;
 const WINDOW_HEIGHT = Math.max(PLAYER.height, VOLUME.height) + STAGE_PADDING * 2;
 const WINDOWS10_WINDOW = { width: 568, height: 176 };
+const WINDOWS11_WINDOW = { width: 544, height: 178 };
+const PLAYER_WINDOWS11 = { width: 480 };
+const PLAYER_WINDOWS11_VOLUME = { width: 48 };
 const WINDOWS10_EDGE_GAP = { horizontal: 48, vertical: 56 };
 const INITIAL_VISIBLE_MS = 4500;
 const LEAVE_VISIBLE_MS = 2000;
@@ -56,6 +59,7 @@ let windowSide = 'right';
 let windowVertical = 'bottom';
 let liquidGlass = true;
 let windows10Style = false;
+let windows11Style = false;
 let showOnTrackChange = true;
 let showOnVolumeChange = true;
 let trayMenu = null;
@@ -164,6 +168,24 @@ function panelRects(bounds) {
       volume: null,
     };
   }
+  if (windows11Style) {
+    const playerX = bounds.x + PLAYER_WINDOWS11_VOLUME.width + PANEL_GAP;
+    const volumeX = bounds.x;
+    return {
+      player: {
+        x: playerX,
+        y: bounds.y,
+        width: PLAYER_WINDOWS11.width,
+        height: WINDOWS11_WINDOW.height,
+      },
+      volume: {
+        x: volumeX,
+        y: bounds.y,
+        width: PLAYER_WINDOWS11_VOLUME.width,
+        height: WINDOWS11_WINDOW.height,
+      },
+    };
+  }
 
   const y = bounds.y + STAGE_PADDING;
   if (windowSide === 'left') {
@@ -237,6 +259,7 @@ function sendLayout() {
     vertical: windowVertical,
     glass: liquidGlass,
     windows10Style,
+    windows11Style,
   });
 }
 
@@ -267,9 +290,11 @@ function loadSettings() {
   try {
     const data = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     windows10Style = Boolean(data && data.windows10Style === true);
+    windows11Style = Boolean(data && data.windows11Style === true);
+    if (windows10Style && windows11Style) windows11Style = false;
     showOnTrackChange = !data || data.showOnTrackChange !== false;
     showOnVolumeChange = !data || data.showOnVolumeChange !== false;
-    liquidGlass = !windows10Style;
+    liquidGlass = !windows10Style && !windows11Style;
   } catch {
     /* first launch or unreadable settings */
   }
@@ -282,6 +307,7 @@ function saveSettings() {
       JSON.stringify({
         liquidGlass,
         windows10Style,
+        windows11Style,
         showOnTrackChange,
         showOnVolumeChange,
       })
@@ -309,6 +335,7 @@ function setBooleanSetting(name, value) {
 function setWidgetStyle(style) {
   liquidGlass = style === 'liquid-glass';
   windows10Style = style === 'windows-10';
+  windows11Style = style === 'windows-11';
   saveSettings();
   refreshTrayMenu();
   if (win && !win.isDestroyed()) {
@@ -319,9 +346,13 @@ function setWidgetStyle(style) {
 }
 
 function windowSize() {
-  return windows10Style
-    ? WINDOWS10_WINDOW
-    : { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
+  if (windows10Style) return WINDOWS10_WINDOW;
+  if (windows11Style) return WINDOWS11_WINDOW;
+  return { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
+}
+
+function hasThemeEdgeGap() {
+  return windows10Style || windows11Style;
 }
 
 function moveWindowTo(x, y) {
@@ -390,8 +421,8 @@ function endWindowDrag() {
 function positionWindow(display) {
   const area = display.workArea;
   const { width, height } = windowSize();
-  const horizontalGap = windows10Style ? WINDOWS10_EDGE_GAP.horizontal : 0;
-  const verticalGap = windows10Style ? WINDOWS10_EDGE_GAP.vertical : 0;
+  const horizontalGap = hasThemeEdgeGap() ? WINDOWS10_EDGE_GAP.horizontal : 0;
+  const verticalGap = hasThemeEdgeGap() ? WINDOWS10_EDGE_GAP.vertical : 0;
   const x = windowSide === 'left'
     ? area.x + horizontalGap
     : area.x + area.width - width - horizontalGap;
@@ -587,8 +618,8 @@ async function snapToNearestCorner() {
   const vertical =
     bounds.y + bounds.height / 2 < area.y + area.height / 2 ? 'top' : 'bottom';
   const { width, height } = windowSize();
-  const horizontalGap = windows10Style ? WINDOWS10_EDGE_GAP.horizontal : 0;
-  const verticalGap = windows10Style ? WINDOWS10_EDGE_GAP.vertical : 0;
+  const horizontalGap = hasThemeEdgeGap() ? WINDOWS10_EDGE_GAP.horizontal : 0;
+  const verticalGap = hasThemeEdgeGap() ? WINDOWS10_EDGE_GAP.vertical : 0;
   const targetX = side === 'left'
     ? area.x + horizontalGap
     : area.x + area.width - width - horizontalGap;
@@ -1051,6 +1082,7 @@ function loadRenderer() {
       vertical: windowVertical,
       glass: liquidGlass ? 'on' : 'off',
       windows10Style: windows10Style ? 'on' : 'off',
+      windows11Style: windows11Style ? 'on' : 'off',
     },
   }).catch((error) => log('renderer load failed:', error.message));
 }
@@ -1126,6 +1158,13 @@ function refreshTrayMenu() {
       type: 'radio',
       checked: windows10Style,
       click: () => setWidgetStyle('windows-10'),
+    },
+    {
+      id: 'windows-11-style',
+      label: 'Windows 11 style',
+      type: 'radio',
+      checked: windows11Style,
+      click: () => setWidgetStyle('windows-11'),
     },
     {
       label: 'Настройки',

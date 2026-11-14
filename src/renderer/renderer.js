@@ -4,7 +4,11 @@ const stage = document.getElementById('stage');
 const widget = document.getElementById('widget');
 const volumePanel = document.getElementById('volumePanel');
 const cover = document.getElementById('cover');
+const coverBlur = document.getElementById('coverBlur');
+const coverGlow = document.getElementById('coverGlow');
 const coverWrap = document.getElementById('coverWrap');
+const appIcon = document.getElementById('appIcon');
+const appIconFrame = document.getElementById('appIconFrame');
 const titleEl = document.getElementById('title');
 const artistEl = document.getElementById('artist');
 const previousButton = document.getElementById('previousButton');
@@ -44,20 +48,35 @@ function applyLayout(layout) {
   } else if (layout.windows10Style === false || layout.windows10Style === 'off') {
     stage.dataset.windows10Style = 'off';
   }
+  if (layout.windows11Style === true || layout.windows11Style === 'on') {
+    stage.dataset.windows11Style = 'on';
+    volumeValue.setAttribute('role', 'button');
+    volumeValue.setAttribute('tabindex', '0');
+  } else if (layout.windows11Style === false || layout.windows11Style === 'off') {
+    stage.dataset.windows11Style = 'off';
+    volumeValue.removeAttribute('role');
+    volumeValue.removeAttribute('tabindex');
+    volumeValue.removeAttribute('aria-label');
+    volumeValue.removeAttribute('title');
+  }
 }
 applyLayout({
   side: initialParams.get('side'),
   vertical: initialParams.get('vertical'),
   glass: initialParams.get('glass'),
   windows10Style: initialParams.get('windows10Style'),
+  windows11Style: initialParams.get('windows11Style'),
 });
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const PROGRESS_INTERVAL = 250;
+const TIMELINE_RESTART_DURATION = 900;
 
 let trackId = null;
 let artId = null;
 let artUrl = null;
+let artRequest = 0;
+let appIconRequest = 0;
 let basePosition = 0;
 let baseTime = performance.now();
 let playing = false;
@@ -77,6 +96,7 @@ let lastControlKey = '';
 let seekDragging = false;
 let seekTarget = null;
 let seekHoldUntil = 0;
+let timelineRestartTimer = null;
 
 let volumeDragging = false;
 let volumeLevel = 0.5;
@@ -89,6 +109,7 @@ let pointerActive = false;
 let tipTimer = null;
 let seekFlashTimer = null;
 let exitTimer = null;
+let coverRevealTimer = null;
 let trackAnimationTimer = null;
 let pendingTrackAnimation = false;
 let optimisticPlaying = null;
@@ -163,30 +184,96 @@ function syncProgressLoop() {
   progressTimer = setTimeout(progressTick, PROGRESS_INTERVAL);
 }
 
+function animateTimelineRestart() {
+  clearTimeout(timelineRestartTimer);
+  widget.classList.remove('timeline-restarting');
+  if (reducedMotion.matches) return 0;
+
+  void seekFill.offsetWidth;
+  widget.classList.add('timeline-restarting');
+  timelineRestartTimer = setTimeout(() => {
+    widget.classList.remove('timeline-restarting');
+    timelineRestartTimer = null;
+  }, TIMELINE_RESTART_DURATION);
+  return TIMELINE_RESTART_DURATION;
+}
+
+function revealCoverArt() {
+  clearTimeout(coverRevealTimer);
+  widget.classList.remove('cover-revealing');
+  if (reducedMotion.matches) return;
+
+  void cover.offsetWidth;
+  widget.classList.add('cover-revealing');
+  coverRevealTimer = setTimeout(() => {
+    widget.classList.remove('cover-revealing');
+    coverRevealTimer = null;
+  }, 720);
+}
+
 function applyArt(url, id) {
   if (url === artUrl && id === artId) return;
   artId = id ?? null;
   artUrl = url || null;
+  const request = ++artRequest;
 
   if (!url) {
+    clearTimeout(coverRevealTimer);
+    coverRevealTimer = null;
+    widget.classList.remove('cover-revealing');
     coverWrap.classList.remove('has-art');
+    coverGlow.classList.remove('has-art');
     cover.removeAttribute('src');
+    coverBlur.removeAttribute('src');
     return;
   }
 
-  const loader = new Image();
-  loader.decoding = 'async';
-  loader.onload = () => {
-    if (artUrl !== url) return;
-    if (cover.getAttribute('src') !== url) cover.src = url;
-    coverWrap.classList.add('has-art');
-  };
-  loader.onerror = () => {
-    if (artUrl !== url) return;
+  coverWrap.classList.remove('has-art');
+  coverGlow.classList.remove('has-art');
+  clearTimeout(coverRevealTimer);
+  coverRevealTimer = null;
+  widget.classList.remove('cover-revealing');
+  cover.removeAttribute('src');
+  coverBlur.removeAttribute('src');
+
+  const images = coverBlur ? [cover, coverBlur] : [cover];
+  const settled = new Set();
+  let pending = images.length;
+  let failed = false;
+  const fail = () => {
+    if (failed || request !== artRequest) return;
+    failed = true;
+    artUrl = null;
+    artId = null;
+    clearTimeout(coverRevealTimer);
+    coverRevealTimer = null;
+    widget.classList.remove('cover-revealing');
     coverWrap.classList.remove('has-art');
+    coverGlow.classList.remove('has-art');
     cover.removeAttribute('src');
+    coverBlur.removeAttribute('src');
   };
-  loader.src = url;
+  const loaded = (image) => {
+    if (request !== artRequest || failed || settled.has(image)) return;
+    settled.add(image);
+    if (!image.naturalWidth || !image.naturalHeight) {
+      fail();
+      return;
+    }
+    pending -= 1;
+    if (pending === 0) {
+      coverWrap.classList.add('has-art');
+      coverGlow.classList.add('has-art');
+      revealCoverArt();
+    }
+  };
+
+  for (const image of images) {
+    image.onload = () => loaded(image);
+    image.onerror = fail;
+    image.src = url;
+    if (image.complete) loaded(image);
+  }
 }
 
 function updateMeta(state) {
@@ -217,8 +304,11 @@ function updateVolumeUi() {
   volumeFill.style.transform = `scaleY(${volumeLevel})`;
   volumeKnob.style.bottom = `${volumeLevel * 100}%`;
 
+  const volumeText = stage.dataset.windows11Style === 'on' ? `${percent}` : `${percent}%`;
+  if (volumeText !== volumeValue.textContent) {
+    volumeValue.textContent = volumeText;
+  }
   if (percent !== lastVolumePercent) {
-    volumeValue.textContent = `${percent}%`;
     volume.setAttribute('aria-valuenow', String(percent));
     lastVolumePercent = percent;
   }
@@ -229,6 +319,13 @@ function updateVolumeUi() {
     'aria-label',
     muted ? 'Громкость, звук выключен' : `Громкость ${percent}%`
   );
+  if (stage.dataset.windows11Style === 'on') {
+    volumeValue.setAttribute(
+      'aria-label',
+      muted ? `Громкость ${percent}%, звук выключен` : `Громкость ${percent}%, нажмите для выключения звука`
+    );
+    volumeValue.title = muted ? 'Включить звук' : 'Выключить звук';
+  }
 }
 
 function setVolume(value, mutedValue) {
@@ -282,6 +379,9 @@ function handleState(state) {
   if (!state) return;
 
   if (!state.session) {
+    clearTimeout(timelineRestartTimer);
+    timelineRestartTimer = null;
+    widget.classList.remove('timeline-restarting');
     trackId = null;
     playing = false;
     uiPlaying = false;
@@ -309,6 +409,8 @@ function handleState(state) {
     return;
   }
 
+  const previousDuration = duration;
+  const previousPosition = currentPosition();
   duration = Number.isFinite(state.duration) ? Math.max(0, state.duration) : 0;
   canSeek = Boolean(state.canSeek) && duration > 0.5;
   canNext = state.canNext !== false;
@@ -349,6 +451,7 @@ function handleState(state) {
   // position while playback is actually moving forward. Never reset the
   // local clock backwards just because a poll repeats that stale value.
   if (!seekDragging && now >= seekHoldUntil) {
+    let timelineRestarting = false;
     if (trackChanged || lastReportedPosition === null) {
       let anchor = reported;
       if (actualPlaying && Number.isFinite(state.lastUpdated)) {
@@ -363,6 +466,13 @@ function handleState(state) {
       }
       basePosition = anchor;
       baseTime = now;
+      timelineRestarting =
+        trackChanged &&
+        hadTrack &&
+        actualPlaying &&
+        previousDuration > 10 &&
+        previousPosition >= previousDuration - 3 &&
+        reported <= 2;
     } else if (!actualPlaying) {
       if (wasPlaying) {
         // Freeze at the locally interpolated position, not at a stale report.
@@ -383,11 +493,27 @@ function handleState(state) {
       if (reported > local + 0.75) {
         basePosition = reported;
         baseTime = now;
+      } else if (
+        reportChanged &&
+        duration > 10 &&
+        local >= duration - 3 &&
+        reported <= 2
+      ) {
+        timelineRestarting = true;
+        basePosition = 0;
       } else if (reportChanged && reported < local - 8) {
         // A large backwards jump is a real external seek, not a stale poll.
         basePosition = reported;
         baseTime = now;
       }
+    }
+    if (timelineRestarting) {
+      basePosition = 0;
+      baseTime = now + animateTimelineRestart();
+    } else if (trackChanged) {
+      clearTimeout(timelineRestartTimer);
+      timelineRestartTimer = null;
+      widget.classList.remove('timeline-restarting');
     }
   }
 
@@ -624,6 +750,21 @@ volumeButton.addEventListener('click', (event) => {
   flashVolumeTip();
 });
 
+volumeValue.addEventListener('click', () => {
+  if (stage.dataset.windows11Style === 'on') volumeButton.click();
+});
+
+volumeValue.addEventListener('keydown', (event) => {
+  if (
+    stage.dataset.windows11Style !== 'on' ||
+    (event.key !== 'Enter' && event.key !== ' ')
+  ) {
+    return;
+  }
+  event.preventDefault();
+  volumeButton.click();
+});
+
 playButton.addEventListener('click', (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -691,6 +832,7 @@ window.glass.onSeek((payload) => {
 
 window.glass.onLayout((layout) => {
   applyLayout(layout);
+  updateVolumeUi();
 });
 
 window.glass.onDragging((value) => {
@@ -700,6 +842,27 @@ window.glass.onDragging((value) => {
 window.glass.onArt((payload) => {
   if (!payload) return;
   applyArt(payload.art || null, payload.artId);
+});
+
+window.glass.onAppIcon((payload) => {
+  if (!payload) return;
+  const request = ++appIconRequest;
+  appIconFrame.classList.remove('has-icon');
+  if (payload.appIcon) {
+    appIcon.onload = () => {
+      if (request === appIconRequest && appIcon.naturalWidth > 0) {
+        appIconFrame.classList.add('has-icon');
+      }
+    };
+    appIcon.onerror = () => {
+      if (request !== appIconRequest) return;
+      appIcon.removeAttribute('src');
+      appIconFrame.classList.remove('has-icon');
+    };
+    appIcon.src = payload.appIcon;
+  } else {
+    appIcon.removeAttribute('src');
+  }
 });
 
 window.glass.onVisibility((visible) => {
