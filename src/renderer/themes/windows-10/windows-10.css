@@ -580,7 +580,8 @@ button::before {
 .title-text {
   display: block;
   white-space: nowrap;
-  overflow: visible;
+  overflow: clip;
+  overflow-clip-margin: 8px;
   text-overflow: ellipsis;
   font-weight: var(--font-weight-light);
   font-size: var(--font-size-32);
@@ -589,7 +590,8 @@ button::before {
 .author-text {
   display: block;
   white-space: nowrap;
-  overflow: visible;
+  overflow: clip;
+  overflow-clip-margin: 8px;
   text-overflow: ellipsis;
   font-weight: var(--font-weight-regular);
   font-size: var(--font-size-16);
