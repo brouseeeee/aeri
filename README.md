@@ -6,12 +6,14 @@
 
 ## Скачать
 
-Готовые сборки — в [Releases](https://github.com/brouseeeee/aeri/releases/latest). В релизе два файла:
+Готовые сборки — в [Releases](https://github.com/brouseeeee/aeri/releases/latest). При публикации релиза CI автоматически прикладывает установщик и portable-сборку:
 
 | Файл | Что это |
 |---|---|
 | **`Aeri-1.0.0-Setup.exe`** | **Установщик** для Windows x64. Ставит приложение в `%LOCALAPPDATA%\Programs\Aeri`, добавляет ярлык в меню «Пуск» и (по желанию) на рабочий стол, создаёт деинсталлятор. Права администратора не нужны. |
 | **`Aeri-1.0.0-portable-win32-x64.zip`** | **Portable-сборка**. Полностью распакуйте архив в любую папку и запустите `Aeri.exe`. Установка не требуется. |
+
+GitHub также автоматически предоставляет архивы исходного кода релиза в форматах ZIP и tar.gz.
 
 Обе версии используют одни и те же настройки в `%APPDATA%\Aeri`. Установщик и деинсталлятор не удаляют эту папку, поэтому положение виджета и режим Liquid glass сохраняются при переустановке и удалении. Сборки не подписаны, поэтому SmartScreen может показать предупреждение — это ожидаемо.
 
@@ -96,7 +98,7 @@ npm run build:bridge
 npm run mock
 ```
 
-## Сборка exe и установщика
+## Сборка приложения и установщика
 
 ```powershell
 npm run build:bridge    # собирает native\media-bridge.exe через PyInstaller
@@ -107,6 +109,8 @@ npm run build:installer # собирает release\Aeri-1.0.0-Setup.exe
 `build:bridge` требует Python 3.11 и зависимости из `tools\requirements-bridge.txt`. `build:app` требует `@electron/packager` (устанавливается через `npm install`) и `native\media-bridge.exe` (уже лежит в репозитории).
 
 `build:installer` требует [Inno Setup 6](https://jrsoftware.org/isinfo.php) (проверено на 6.7.3) и готовую папку `release\Aeri-win32-x64\`. Установщик собирается по скрипту `tools\installer.iss`, ставится для текущего пользователя в `%LOCALAPPDATA%\Programs\Aeri` и не трогает `%APPDATA%\Aeri`. Если Inno Setup не установлен: `winget install --id JRSoftware.InnoSetup -e`.
+
+При публикации GitHub Release workflow `.github/workflows/release.yml` выполняет `npm run build`, собирает установщик и portable ZIP, затем загружает оба файла в релиз. Архивы исходного кода GitHub прикладывает автоматически.
 
 В git не попадают `release\`, `build\`, `node_modules\`, `.venv\` и локальные ярлыки — они исключены через `.gitignore`. Собранный `native\media-bridge.exe` хранится в репозитории.
 
